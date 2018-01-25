@@ -66,19 +66,19 @@ def _get_price_array_():
 
     symbol_list = np.array(columns_indexes)
 
-    price_array = DataFrame.as_matrix(dframe_var_template)
+    #price_array = DataFrame.as_matrix(dframe_var_template)
 
-    print('price array: ', price_array, '\n', 'symbol list', symbol_list, '\n')
+    #print('price array: ', price_array, '\n', 'symbol list', symbol_list, '\n')
+
+    #print('price array: ', dframe_var_template, '\n', 'symbol list', symbol_list, '\n')
     
-    return symbol_list, price_array
+    return symbol_list, dframe_var_template
 
 def _get_price_return_(rows, columns, price_array):
     #矩阵运算得到return
-    price_return = np.zeros([rows - 1, columns])
-    for row in range(rows - 1):
-        price_return[row] = price_array[row + 1, :] / price_array[row, :]
+    price_return = price_array.pct_change() + 1
     price_return = np.log(price_return)
-    #print('priceReturn: \n', price_return)
+    price_return = DataFrame.as_matrix(price_return.dropna())
     return price_return
 
 def _get_excess_return_(rows, columns, price_return):
@@ -110,8 +110,9 @@ def _get_var_cov_(rows, excess_return):
 def _get_lp_var_cov_():
     #get price return
     symbol_list, price_array = _get_price_array_()
-    rows = len(price_array)
-    columns = len(price_array[0])
+    rows = price_array.shape[0]
+    columns = price_array.shape[1]
+    print('rows: ', rows, 'columns: ', columns, '\n')
     price_return = _get_price_return_(rows, columns, price_array)
     return_statistic, excess_return = _get_excess_return_(
         rows, columns, price_return)
