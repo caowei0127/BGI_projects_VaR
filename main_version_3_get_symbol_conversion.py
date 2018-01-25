@@ -177,7 +177,7 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     initial_index = 1.0    # 股票或指数初始的价格;
     i = 20000       # number of simulation
     time_step = 1.0  # 期权的到期年限(距离到期日时间间隔)
-    number_of_time_step = 50         # number of time steps
+    number_of_time_step = 365         # number of time steps
     time_interval = time_step / number_of_time_step       # time enterval
 
     # 20000条模拟路径，每条路径５０个时间步数
@@ -188,27 +188,14 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
         return_array[time_step] = return_array[time_step - 1] *np.exp(
             (avg_return - 0.5 * std_dev ** 2) * \
             time_interval + std_dev * np.sqrt(time_interval) * random_array)
-    print('final price: ', return_array[-1], '\n')
-    #rank_return = pow(return_array[-1], (1 / number_of_time_step))
-    rank_return = np.sort(return_array[-1] - 1)
-    #rank_return = np.sort(rank_return)
-    print('rank return: ', rank_return, '\n')
-    rank_pnl = rank_return * portfolio_value
-    mc_pnl = [
-        rank_pnl[int(i * (1 - 0.5) - 1)], rank_pnl[int(i * (1 - 0.6) - 1)],
-        rank_pnl[int(i * (1 - 0.7) - 1)], rank_pnl[int(i * (1 - 0.8) - 1)],
-        rank_pnl[int(i * (1 - 0.9) - 1)], rank_pnl[int(i * (1 - 0.95) - 1)],
-        rank_pnl[int(i * (1 - 0.99) - 1)]
-    ]
-    mc_c_pnl = [
-        np.sum(rank_pnl[:int(i * (1 - 0.5))]) / int(i * (1 - 0.5)), 
-        np.sum(rank_pnl[:int(i * (1 - 0.6))]) / int(i * (1 - 0.6)),
-        np.sum(rank_pnl[:int(i * (1 - 0.7))]) / int(i * (1 - 0.7)), 
-        np.sum(rank_pnl[:int(i * (1 - 0.8))]) / int(i * (1 - 0.8)),
-        np.sum(rank_pnl[:int(i * (1 - 0.9))]) / int(i * (1 - 0.9)), 
-        np.sum(rank_pnl[:int(i * (1 - 0.95))]) / int(i * (1 - 0.95)),
-        np.sum(rank_pnl[:int(i * (1 - 0.99))]) / int(i * (1 - 0.99))
-    ]
+    rank_return = return_array[-1] - 1
+    rank_return_df = pd.DataFrame(rank_return * portfolio_value)
+    mc_pnl = []
+    mc_c_pnl = []
+    for confidence_lvl in [50, 40, 30, 20, 10, 5, 1]:
+        percentile_pnl = np.percentile(rank_return_df, confidence_lvl)
+        mc_pnl.append(percentile_pnl)
+        mc_c_pnl.append(rank_return_df[rank_return_df < percentile_pnl].mean()[0])
     return mc_pnl, mc_c_pnl
 
 def main(argv=None):
