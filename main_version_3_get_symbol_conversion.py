@@ -14,6 +14,8 @@ import requests
 '''
 LP Raw Data
 '''
+
+
 def _get_symbol_conversion_():
     symbol_conversion = pd.read_excel(
         'symbolConversion.xlsx', sheet_name='symbolConversion')
@@ -21,14 +23,16 @@ def _get_symbol_conversion_():
         'symbol_index').to_dict()['conversion_rate']
     return symbol_conversion_dict
 
+
 def _get_access_token_():
     url = "https://38.76.4.235:44300/api/token"
-    headers = {'content-type':'application/x-www-form-urlencoded', \
-                'grant_type':'password', 'username':'APITest', \
-                'password':'cw12345..'}
+    headers = {'content-type': 'application/x-www-form-urlencoded',
+               'grant_type': 'password', 'username': 'APITest',
+               'password': 'cw12345..'}
     request = requests.post(url, data=headers, verify=False)
     data = request.json()
     return data['access_token']
+
 
 def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dict):
     dollarized_value_dict = {}
@@ -60,13 +64,17 @@ def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dic
     print(dollarized_value_dict)
     return equity, dollarized_value_dict
 
+
 '''
 price return
 '''
+
+
 def _get_price_array_():
     var_template = pd.ExcelFile('VaR Template.xlsx')
 
-    dframe_var_template = var_template.parse('~Raw Date', index_col=0, header=0)
+    dframe_var_template = var_template.parse(
+        '~Raw Date', index_col=0, header=0)
 
     columns_indexes = dframe_var_template.columns.values
 
@@ -77,10 +85,11 @@ def _get_price_array_():
     #print('price array: ', price_array, '\n', 'symbol list', symbol_list, '\n')
 
     #print('price array: ', dframe_var_template, '\n', 'symbol list', symbol_list, '\n')
-    
+
     return symbol_list, dframe_var_template
 
-def _get_price_return_(rows, columns, price_array):
+
+def _get_price_return_(price_array):
     #矩阵运算得到return
     price_return = price_array.pct_change() + 1
     price_return = np.log(price_return)
@@ -106,8 +115,6 @@ def _get_excess_return_(rows, columns, price_return):
 def _get_var_cov_(rows, excess_return):
     #excessReturn 转置矩阵相乘
     var_cov = np.matmul(excess_return.T, excess_return, out=None) / (rows - 1)
-    #var_cov = np.cov(excess_return.T) / (rows - 1)
-    #print('Var-Cov: \n', var_cov)
     return var_cov
 
 def _get_lp_var_cov_():
@@ -116,11 +123,12 @@ def _get_lp_var_cov_():
     rows = price_array.shape[0]
     columns = price_array.shape[1]
     print('rows: ', rows, 'columns: ', columns, '\n')
-    price_return = _get_price_return_(rows, columns, price_array)
+    price_return = _get_price_return_(price_array)
     return_statistic, excess_return = _get_excess_return_(
         rows, columns, price_return)
     var_cov = _get_var_cov_(rows, excess_return)
     return return_statistic, symbol_list, var_cov
+
 
 def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     #get LP positions
@@ -146,6 +154,7 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     transit = np.matmul(weightage_array.T, var_cov, out=None)
     var = np.matmul(transit, weightage_array, out=None)
     return equity, portfolio_value, weightage_array, var
+
 
 def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statistic):
     '''
@@ -173,6 +182,7 @@ def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statisti
         pnl_5.append(var_pl_5)
     return avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5
 
+
 def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     '''
     get monte carlo result based on lp positions
@@ -188,8 +198,8 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     return_array[0] = initial_index
     for time_step in range(1, number_of_time_step + 1):
         random_array = np.random.standard_normal(i)
-        return_array[time_step] = return_array[time_step - 1] *np.exp(
-            (avg_return - 0.5 * std_dev ** 2) * \
+        return_array[time_step] = return_array[time_step - 1] * np.exp(
+            (avg_return - 0.5 * std_dev ** 2) *
             time_interval + std_dev * np.sqrt(time_interval) * random_array)
     rank_return = return_array[-1] - 1
     rank_return_df = pd.DataFrame(rank_return * portfolio_value)
@@ -198,8 +208,10 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     for confidence_lvl in [50, 40, 30, 20, 10, 5, 1]:
         percentile_pnl = np.percentile(rank_return_df, confidence_lvl)
         mc_pnl.append(percentile_pnl)
-        mc_c_pnl.append(rank_return_df[rank_return_df < percentile_pnl].mean()[0])
+        mc_c_pnl.append(
+            rank_return_df[rank_return_df < percentile_pnl].mean()[0])
     return mc_pnl, mc_c_pnl
+
 
 def main(argv=None):
     '''
@@ -223,9 +235,10 @@ def main(argv=None):
             portfolio_value, avg_return_5, std_dev_5)
         print('portfolio value: ', portfolio_value, '\n',
               'equity: ', equity, '\n',
-                pnl_1, '\n', pnl_5, '\n',
-                mc_pnl, '\n',  mc_c_pnl, '\n',
-                mc_pnl_5, '\n', mc_c_pnl_5)
+              pnl_1, '\n', pnl_5, '\n',
+              mc_pnl, '\n',  mc_c_pnl, '\n',
+              mc_pnl_5, '\n', mc_c_pnl_5)
+
 
 if __name__ == "__main__":
     main()
