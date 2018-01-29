@@ -32,11 +32,18 @@ def _get_access_token_():
 
 def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dict):
     dollarized_value_dict = {}
-    url = 'https://38.76.4.235:44300/api/rest/margin-account/' + \
-             str(margin_account_number) + '/positions'
-    request = requests.get(url, headers={'Authorization':'Bearer '+access_token}, verify=False)
-    data = json.loads(request.text)
-    for symbol_position in data['data']:
+    url_position = 'https://38.76.4.235:44300/api/rest/margin-account/' + \
+        str(margin_account_number) + '/positions'
+    url_equity = 'https://38.76.4.235:44300/api/rest/margin-account/' + \
+        str(margin_account_number)
+    request_position = requests.get(url_position, headers={
+                                    'Authorization': 'Bearer ' + access_token}, verify=False)
+    request_equity = requests.get(
+        url_equity, headers={'Authorization': 'Bearer ' + access_token}, verify=False)
+    data_position = json.loads(request_position.text)
+    data_equity = json.loads(request_equity.text)
+    equity = data_equity['equity']
+    for symbol_position in data_position['data']:
         if margin_account_number == 22:
             symbol = symbol_position['coreSymbol'][1:]
         else:
@@ -51,8 +58,7 @@ def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dic
         else:
             dollarized_value_dict[symbol] = position
     print(dollarized_value_dict)
-    return dollarized_value_dict
-
+    return equity, dollarized_value_dict
 
 '''
 price return
@@ -99,11 +105,8 @@ def _get_excess_return_(rows, columns, price_return):
 
 def _get_var_cov_(rows, excess_return):
     #excessReturn 转置矩阵相乘
-    xtx = np.matmul(excess_return.T, excess_return, out=None)
-    #print('XTX: \n', xtx)
-
-    #得到Var-Cov
-    var_cov = xtx / (rows - 1)
+    var_cov = np.matmul(excess_return.T, excess_return, out=None) / (rows - 1)
+    #var_cov = np.cov(excess_return.T) / (rows - 1)
     #print('Var-Cov: \n', var_cov)
     return var_cov
 
@@ -124,7 +127,7 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     access_token = _get_access_token_()
     symbol_conversion_dict = _get_symbol_conversion_()
 
-    dollarized_value_dict = _get_lp_position_(
+    equity, dollarized_value_dict = _get_lp_position_(
         margin_account_number, access_token, symbol_conversion_dict)
 
     #create weightage
@@ -142,7 +145,7 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     #矩阵相乘
     transit = np.matmul(weightage_array.T, var_cov, out=None)
     var = np.matmul(transit, weightage_array, out=None)
-    return portfolio_value, weightage_array, var
+    return equity, portfolio_value, weightage_array, var
 
 def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statistic):
     '''
@@ -175,9 +178,9 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     get monte carlo result based on lp positions
     '''
     initial_index = 1.0    # 股票或指数初始的价格;
-    i = 20000       # number of simulation
+    i = 10000       # number of simulation
     time_step = 1.0  # 期权的到期年限(距离到期日时间间隔)
-    number_of_time_step = 365         # number of time steps
+    number_of_time_step = 50         # number of time steps
     time_interval = time_step / number_of_time_step       # time enterval
 
     # 20000条模拟路径，每条路径５０个时间步数
@@ -210,7 +213,7 @@ def main(argv=None):
     margin_account_numbers = [11]
     #margin_account_numbers = [9, 10, 11, 13, 22]
     for margin_account_number in margin_account_numbers:
-        portfolio_value, weightage_array, dev = _get_lp_var_(
+        equity, portfolio_value, weightage_array, dev = _get_lp_var_(
             symbol_list, var_cov, margin_account_number)
         avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5 = _get_lp_based_result_(
             portfolio_value, weightage_array, dev, return_statistic)
@@ -219,6 +222,7 @@ def main(argv=None):
         mc_pnl_5, mc_c_pnl_5 = _get_monte_carlo_result_(
             portfolio_value, avg_return_5, std_dev_5)
         print('portfolio value: ', portfolio_value, '\n',
+              'equity: ', equity, '\n',
                 pnl_1, '\n', pnl_5, '\n',
                 mc_pnl, '\n',  mc_c_pnl, '\n',
                 mc_pnl_5, '\n', mc_c_pnl_5)
