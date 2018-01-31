@@ -8,8 +8,6 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 import requests
-#import DatabaseTool
-#import getopt
 
 '''
 LP Raw Data
@@ -65,19 +63,9 @@ price return
 '''
 def _get_price_array_():
     var_template = pd.ExcelFile('VaR Template.xlsx')
-
     dframe_var_template = var_template.parse('~Raw Date', index_col=0, header=0)
-
     columns_indexes = dframe_var_template.columns.values
-
-    symbol_list = np.array(columns_indexes)
-
-    #price_array = DataFrame.as_matrix(dframe_var_template)
-
-    #print('price array: ', price_array, '\n', 'symbol list', symbol_list, '\n')
-
-    #print('price array: ', dframe_var_template, '\n', 'symbol list', symbol_list, '\n')
-    
+    symbol_list = np.array(columns_indexes)    
     return symbol_list, dframe_var_template
 
 def _get_price_return_(rows, columns, price_array):
@@ -126,7 +114,6 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     #get LP positions
     access_token = _get_access_token_()
     symbol_conversion_dict = _get_symbol_conversion_()
-
     equity, dollarized_value_dict = _get_lp_position_(
         margin_account_number, access_token, symbol_conversion_dict)
 
@@ -221,9 +208,11 @@ def main(argv=None):
             portfolio_value, avg_return, std_dev)
         mc_pnl_5, mc_c_pnl_5 = _get_monte_carlo_result_(
             portfolio_value, avg_return_5, std_dev_5)
+        
         print('portfolio value: ', portfolio_value, '\n',
               'equity: ', equity, '\n',
-              pnl_1, '\n', pnl_5, '\n',
+              pnl_1, '\n',
+              pnl_5, '\n',
               mc_pnl, '\n',  mc_c_pnl, '\n',
               mc_pnl_5, '\n', mc_c_pnl_5)
 
