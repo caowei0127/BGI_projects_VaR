@@ -59,19 +59,9 @@ price return
 '''
 def _get_price_array_():
     var_template = pd.ExcelFile('VaR Template.xlsx')
-
     dframe_var_template = var_template.parse('~Raw Date', index_col=0, header=0)
-
     columns_indexes = dframe_var_template.columns.values
-
-    symbol_list = np.array(columns_indexes)
-
-    #price_array = DataFrame.as_matrix(dframe_var_template)
-
-    #print('price array: ', price_array, '\n', 'symbol list', symbol_list, '\n')
-
-    #print('price array: ', dframe_var_template, '\n', 'symbol list', symbol_list, '\n')
-    
+    symbol_list = np.array(columns_indexes)    
     return symbol_list, dframe_var_template
 
 def _get_price_return_(rows, columns, price_array):
