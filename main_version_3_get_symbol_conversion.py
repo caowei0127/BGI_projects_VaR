@@ -8,14 +8,11 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 import requests
-#import DatabaseTool
-#import getopt
+import datetime
 
 '''
 LP Raw Data
 '''
-
-
 def _get_symbol_conversion_():
     symbol_conversion = pd.read_excel(
         'symbolConversion.xlsx', sheet_name='symbolConversion')
@@ -46,7 +43,10 @@ def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dic
         url_equity, headers={'Authorization': 'Bearer ' + access_token}, verify=False)
     data_position = json.loads(request_position.text)
     data_equity = json.loads(request_equity.text)
-    equity = data_equity['equity']
+
+    free_margin = data_equity['freeMargin']
+    margin = data_equity['margin']
+
     for symbol_position in data_position['data']:
         if margin_account_number == 22:
             symbol = symbol_position['coreSymbol'][1:]
@@ -62,14 +62,12 @@ def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dic
         else:
             dollarized_value_dict[symbol] = position
     print(dollarized_value_dict)
-    return equity, dollarized_value_dict
+    return free_margin, margin, dollarized_value_dict
 
 
 '''
 price return
 '''
-
-
 def _get_price_array_():
     var_template = pd.ExcelFile('VaR Template.xlsx')
     dframe_var_template = var_template.parse(
@@ -125,7 +123,7 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     access_token = _get_access_token_()
     symbol_conversion_dict = _get_symbol_conversion_()
 
-    equity, dollarized_value_dict = _get_lp_position_(
+    free_margin, margin, dollarized_value_dict = _get_lp_position_(
         margin_account_number, access_token, symbol_conversion_dict)
 
     #create weightage
@@ -143,7 +141,7 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     #矩阵相乘
     transit = np.matmul(weightage_array.T, var_cov, out=None)
     var = np.matmul(transit, weightage_array, out=None)
-    return equity, portfolio_value, weightage_array, var
+    return free_margin, margin, portfolio_value, weightage_array, var
 
 
 def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statistic):
@@ -202,6 +200,47 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
             rank_return_df[rank_return_df < percentile_pnl].mean()[0])
     return mc_pnl, mc_c_pnl
 
+'''
+post data
+'''
+def _get_bi_access_token_():
+    '''
+    get power bi access token
+    '''
+    get_access_token_url = 'https://login.microsoftonline.com/common/oauth2/token'
+    access_token_headers = {'grant_type': 'password', 'scope': 'openid',
+                            'resource': 'https://analysis.windows.net/powerbi/api',
+                            'client_id': '68817d3c-cd2d-4fc3-a602-b77374095798',
+                            'username': 'prime@blackwellglobal.com',
+                            'password': 'June123me'}
+    access_token_request = requests.post(
+        get_access_token_url, data=access_token_headers, verify=False)
+    access_token_response = access_token_request.json()
+    bi_access_token = access_token_response['access_token']
+    return bi_access_token
+
+def _get_bi_dataset_id_(bi_access_token):
+    '''
+    get dataset id
+    '''
+    get_dataset_name_url = 'https://api.powerbi.com/v1.0/myorg/datasets'
+    dataset_name_request = requests.get(get_dataset_name_url, headers={
+                                        'Authorization': 'Bearer ' + bi_access_token})
+    dataset_name_response = dataset_name_request.json()
+    for value in dataset_name_response['value']:
+        if value['name'] == 'VaR':
+            dataset_id = value['id']
+    return dataset_id
+
+def _post_data_to_bi_(dataset_id, bi_access_token, data):
+    '''
+    push data
+    '''
+    pushdata_url_list = [
+        'https://api.powerbi.com/v1.0/myorg/datasets/', dataset_id, '/tables/LP VaR/rows']
+    pushdata_url = ''.join(pushdata_url_list)
+    requests.post(pushdata_url, headers={
+        'Authorization': 'Bearer ' + bi_access_token}, json={"rows": [data]})
 
 def main(argv=None):
     '''
@@ -213,9 +252,10 @@ def main(argv=None):
     return_statistic, symbol_list, var_cov = _get_lp_var_cov_()
 
     margin_account_numbers = [11]
+    mc_lp = {10:'LMAX', 11:'Divisa'}
     #margin_account_numbers = [9, 10, 11, 13, 22]
-    for margin_account_number in margin_account_numbers:
-        equity, portfolio_value, weightage_array, dev = _get_lp_var_(
+    for margin_account_number in mc_lp.keys():
+        free_margin, margin, portfolio_value, weightage_array, dev = _get_lp_var_(
             symbol_list, var_cov, margin_account_number)
         avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5 = _get_lp_based_result_(
             portfolio_value, weightage_array, dev, return_statistic)
@@ -223,11 +263,21 @@ def main(argv=None):
             portfolio_value, avg_return, std_dev)
         mc_pnl_5, mc_c_pnl_5 = _get_monte_carlo_result_(
             portfolio_value, avg_return_5, std_dev_5)
-        print('portfolio value: ', portfolio_value, '\n',
-              'equity: ', equity, '\n',
-              pnl_1, '\n', pnl_5, '\n',
-              mc_pnl, '\n',  mc_c_pnl, '\n',
-              mc_pnl_5, '\n', mc_c_pnl_5)
+        equity = float(free_margin) + float(margin)
+        lp_var_info_day = {'timestamp':datetime.datetime.now().strftime(
+            "%Y-%m-%d %H:%M"), 'LP':mc_lp[margin_account_number], 'free equity':float(free_margin), 
+            'margin': float(margin), 'c8': equity + mc_c_pnl[-4], 'c9': equity + mc_c_pnl[-3],
+            'c95': equity + mc_c_pnl[-2], 'type': 'one day'}
+        lp_var_info_week = {'timestamp': datetime.datetime.now().strftime(
+            "%Y-%m-%d %H:%M"), 'LP': mc_lp[margin_account_number], 'free equity': float(free_margin),
+            'margin': float(margin), 'c8': equity + mc_c_pnl_5[-4], 'c9': equity + mc_c_pnl_5[-3],
+            'c95': equity + mc_c_pnl_5[-2], 'type': 'one week'}
+        print(lp_var_info_day,'\n',lp_var_info_week)
+        bi_access_token = _get_bi_access_token_()
+        dataset_id = _get_bi_dataset_id_(bi_access_token)
+        _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_day)
+        _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_week)
+        print('yeah!!!')
 
 if __name__ == "__main__":
     main()
