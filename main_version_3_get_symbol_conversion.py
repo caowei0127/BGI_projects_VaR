@@ -6,6 +6,8 @@ import json
 from scipy import stats
 import pandas as pd
 import schedule
+import psycopg2
+from sqlalchemy import create_engine
 import time
 from pandas import DataFrame
 import numpy as np
@@ -203,12 +205,9 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     return mc_pnl, mc_c_pnl
 
 '''
-post data
-'''
+#post data
 def _get_bi_access_token_():
-    '''
-    get power bi access token
-    '''
+    #get power bi access token
     get_access_token_url = 'https://login.microsoftonline.com/common/oauth2/token'
     access_token_headers = {'grant_type': 'password', 'scope': 'openid',
                             'resource': 'https://analysis.windows.net/powerbi/api',
@@ -222,9 +221,7 @@ def _get_bi_access_token_():
     return bi_access_token
 
 def _get_bi_dataset_id_(bi_access_token):
-    '''
-    get dataset id
-    '''
+    #get dataset id
     get_dataset_name_url = 'https://api.powerbi.com/v1.0/myorg/datasets'
     dataset_name_request = requests.get(get_dataset_name_url, headers={
                                         'Authorization': 'Bearer ' + bi_access_token})
@@ -235,14 +232,21 @@ def _get_bi_dataset_id_(bi_access_token):
     return dataset_id
 
 def _post_data_to_bi_(dataset_id, bi_access_token, data):
-    '''
-    push data
-    '''
+    #push data
     pushdata_url_list = [
         'https://api.powerbi.com/v1.0/myorg/datasets/', dataset_id, '/tables/LP VaR/rows']
     pushdata_url = ''.join(pushdata_url_list)
     requests.post(pushdata_url, headers={
         'Authorization': 'Bearer ' + bi_access_token}, json={"rows": [data]})
+'''
+def _save_lp_var_(lp_var_info):
+    # create_engine说明：dialect[+driver]://user:password@host/dbname[?key=value..]
+    df_lp_var_info = DataFrame(lp_var_info)
+    engine = create_engine(
+        'postgresql://postgres:12345@localhost:5432/VaR')
+    print(df_lp_var_info)
+    df_lp_var_info.to_sql("LP VaR", engine,
+                          index=False, if_exists='append')
 
 def main(argv=None):
     '''
@@ -266,21 +270,30 @@ def main(argv=None):
         mc_pnl_5, mc_c_pnl_5 = _get_monte_carlo_result_(
             portfolio_value, avg_return_5, std_dev_5)
         equity = float(free_margin) + float(margin)
-        lp_var_info_day = {'timestamp':datetime.datetime.now().strftime(
-            "%Y-%m-%d %H:%M"), 'LP':mc_lp[margin_account_number], 'free equity':float(free_margin), 
-            'margin': float(margin), 'c8': equity + mc_c_pnl[-4], 'c9': equity + mc_c_pnl[-3],
-            'c95': equity + mc_c_pnl[-2], 'type': 'one day'}
+        lp_var_info_day = {'timestamp':[datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), datetime.datetime.now().strftime("%Y-%m-%d %H:%M")], 
+            'LP': [mc_lp[margin_account_number], mc_lp[margin_account_number]], 
+            'free equity': [float(free_margin), float(free_margin)],
+            'margin': [float(margin), float(margin)],
+            'c8': [equity + mc_c_pnl[-4], equity + mc_c_pnl_5[-4]],
+            'c9': [equity + mc_c_pnl[-3], equity + mc_c_pnl_5[-3]],
+            'c95': [equity + mc_c_pnl[-2], equity + mc_c_pnl_5[-2]],
+            'type': ['one day', 'one week']}
+        '''
         lp_var_info_week = {'timestamp': datetime.datetime.now().strftime(
             "%Y-%m-%d %H:%M"), 'LP': mc_lp[margin_account_number], 'free equity': float(free_margin),
             'margin': float(margin), 'c8': equity + mc_c_pnl_5[-4], 'c9': equity + mc_c_pnl_5[-3],
             'c95': equity + mc_c_pnl_5[-2], 'type': 'one week'}
-        print(lp_var_info_day,'\n',lp_var_info_week)
-
+        '''
+        print(lp_var_info_day)
+        _save_lp_var_(lp_var_info_day)
+        #_save_lp_var_(lp_var_info_week)
+        '''
         bi_access_token = _get_bi_access_token_()
         dataset_id = _get_bi_dataset_id_(bi_access_token)
         _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_day)
         _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_week)
         print('yeah!!!')
+        '''
 
 
 if __name__ == "__main__":
