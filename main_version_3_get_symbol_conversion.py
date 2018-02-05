@@ -5,6 +5,8 @@ import sys
 import json
 from scipy import stats
 import pandas as pd
+import schedule
+import time
 from pandas import DataFrame
 import numpy as np
 import requests
@@ -273,11 +275,17 @@ def main(argv=None):
             'margin': float(margin), 'c8': equity + mc_c_pnl_5[-4], 'c9': equity + mc_c_pnl_5[-3],
             'c95': equity + mc_c_pnl_5[-2], 'type': 'one week'}
         print(lp_var_info_day,'\n',lp_var_info_week)
+
         bi_access_token = _get_bi_access_token_()
         dataset_id = _get_bi_dataset_id_(bi_access_token)
         _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_day)
         _post_data_to_bi_(dataset_id, bi_access_token, lp_var_info_week)
         print('yeah!!!')
 
+
 if __name__ == "__main__":
-    main()
+    schedule.every().hour.do(main)
+
+while True:
+    schedule.run_pending()
+    time.sleep(1)
