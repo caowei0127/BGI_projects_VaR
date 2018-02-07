@@ -17,8 +17,6 @@ import datetime
 '''
 LP Raw Data
 '''
-
-
 def _get_symbol_conversion_():
     symbol_conversion = pd.read_excel(
         'symbolConversion.xlsx', sheet_name='symbolConversion')
@@ -70,6 +68,7 @@ def _get_lp_position_(margin_account_number, access_token, symbol_conversion_dic
     print(dollarized_value_dict)
     return free_margin, margin, dollarized_value_dict
 
+
 '''
 price return
 '''
@@ -80,6 +79,7 @@ def _get_price_array_():
     columns_indexes = dframe_var_template.columns.values
     symbol_list = np.array(columns_indexes)
     return symbol_list, dframe_var_template
+
 
 def _get_price_return_(price_array):
     #矩阵运算得到return
@@ -126,8 +126,10 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     #get LP positions
     access_token = _get_access_token_()
     symbol_conversion_dict = _get_symbol_conversion_()
+
     free_margin, margin, dollarized_value_dict = _get_lp_position_(
         margin_account_number, access_token, symbol_conversion_dict)
+
     #create weightage
     weightage = {}
     for symbol in symbol_list:
@@ -139,10 +141,12 @@ def _get_lp_var_(symbol_list, var_cov, margin_account_number):
     weightage_array = np.array(weightage_list)
     portfolio_value = np.sum(weightage_array)
     weightage_array = weightage_array / portfolio_value
+
     #矩阵相乘
     transit = np.matmul(weightage_array.T, var_cov, out=None)
     var = np.matmul(transit, weightage_array, out=None)
     return free_margin, margin, portfolio_value, weightage_array, var
+
 
 def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statistic):
     '''
@@ -169,6 +173,7 @@ def _get_lp_based_result_(portfolio_value, weightage_array, dev, return_statisti
             confidence_lvl, avg_return_5, std_dev_5)[0] * portfolio_value
         pnl_5.append(var_pl_5)
     return avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5
+
 
 def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
     '''
@@ -256,7 +261,6 @@ def main(argv=None):
     margin_account_numbers = [11]
     mc_lp = {10:'LMAX', 11:'Divisa'}
     #margin_account_numbers = [9, 10, 11, 13, 22]
-
     for margin_account_number in mc_lp.keys():
         free_margin, margin, portfolio_value, weightage_array, dev = _get_lp_var_(
             symbol_list, var_cov, margin_account_number)
@@ -271,9 +275,9 @@ def main(argv=None):
             'LP': [mc_lp[margin_account_number], mc_lp[margin_account_number]], 
             'free equity': [float(free_margin), float(free_margin)],
             'margin': [float(margin), float(margin)],
-            'c8': [equity + mc_c_pnl[-4], equity + mc_c_pnl_5[-4]],
-            'c9': [equity + mc_c_pnl[-3], equity + mc_c_pnl_5[-3]],
-            'c95': [equity + mc_c_pnl[-2], equity + mc_c_pnl_5[-2]],
+            'c8': [np.abs(mc_c_pnl[-4]), np.abs(mc_c_pnl_5[-4])],
+            'c9': [np.abs(mc_c_pnl[-3]), np.abs(mc_c_pnl_5[-3])],
+            'c95': [np.abs(mc_c_pnl[-2]), np.abs(mc_c_pnl_5[-2])],
             'type': ['one day', 'one week']}
         print(lp_var_info_day)
         _save_lp_var_(lp_var_info_day)
@@ -285,10 +289,11 @@ def main(argv=None):
         print('yeah!!!')
         '''
 
-
 if __name__ == "__main__":
-    schedule.every().hour.do(main)
-
+    main()
+    #schedule.every().hour.do(main)
+'''
 while True:
     schedule.run_pending()
     time.sleep(1)
+'''
