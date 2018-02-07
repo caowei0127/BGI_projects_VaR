@@ -96,7 +96,6 @@ def _get_excess_return_(rows, columns, price_return):
         return_statistic[1][column] = rows
         return_statistic[2][column] = np.std(price_return[:, column])
         return_statistic[3][column] = np.var(price_return[:, column])
-    #print('returnStatistic: \n', return_statistic)
     #获取减均值之后的矩阵
     for row in range(rows - 1):
         price_return[row] = price_return[row] - return_statistic[0]
@@ -195,14 +194,12 @@ def _get_monte_carlo_result_(portfolio_value, avg_return, std_dev):
             time_interval + std_dev * np.sqrt(time_interval) * random_array)
     rank_return = return_array[-1] - 1
     rank_return_df = pd.DataFrame(rank_return * portfolio_value)
-    mc_pnl = []
     mc_c_pnl = []
     for confidence_lvl in [50, 40, 30, 20, 10, 5, 1]:
         percentile_pnl = np.percentile(rank_return_df, confidence_lvl)
-        mc_pnl.append(percentile_pnl)
         mc_c_pnl.append(
             rank_return_df[rank_return_df < percentile_pnl].mean()[0])
-    return mc_pnl, mc_c_pnl
+    return mc_c_pnl
 
 '''
 #post data
@@ -255,22 +252,17 @@ def main(argv=None):
     '''
     if argv is None:
         argv = sys.argv
-
     return_statistic, symbol_list, var_cov = _get_lp_var_cov_()
-
-    margin_account_numbers = [11]
     mc_lp = {10:'LMAX', 11:'Divisa'}
-    #margin_account_numbers = [9, 10, 11, 13, 22]
     for margin_account_number in mc_lp.keys():
         free_margin, margin, portfolio_value, weightage_array, dev = _get_lp_var_(
             symbol_list, var_cov, margin_account_number)
         avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5 = _get_lp_based_result_(
             portfolio_value, weightage_array, dev, return_statistic)
-        mc_pnl, mc_c_pnl = _get_monte_carlo_result_(
+        mc_c_pnl = _get_monte_carlo_result_(
             portfolio_value, avg_return, std_dev)
-        mc_pnl_5, mc_c_pnl_5 = _get_monte_carlo_result_(
+        mc_c_pnl_5 = _get_monte_carlo_result_(
             portfolio_value, avg_return_5, std_dev_5)
-        equity = float(free_margin) + float(margin)
         lp_var_info_day = {'timestamp':[datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), datetime.datetime.now().strftime("%Y-%m-%d %H:%M")], 
             'LP': [mc_lp[margin_account_number], mc_lp[margin_account_number]], 
             'free equity': [float(free_margin), float(free_margin)],
@@ -290,10 +282,8 @@ def main(argv=None):
         '''
 
 if __name__ == "__main__":
-    main()
-    #schedule.every().hour.do(main)
-'''
+    schedule.every().hour.do(main)
+
 while True:
     schedule.run_pending()
     time.sleep(1)
-'''
