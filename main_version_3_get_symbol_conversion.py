@@ -292,9 +292,9 @@ def main(argv=None):
             'c9': [np.abs(mc_c_pnl[-3]), np.abs(mc_c_pnl_5[-3])],
             'c95': [np.abs(mc_c_pnl[-2]), np.abs(mc_c_pnl_5[-2])],
             'type': ['one day', 'one week']}
-        if np.abs(mc_c_pnl[-4]) * 3 > free_margin:
+        if (float(np.abs(mc_c_pnl[-4])) * 3) > float(free_margin):
             _send_alert_(mc_lp[margin_account_number], 'one day')
-        elif np.abs(mc_c_pnl_5[-3]) > free_margin:
+        elif float(np.abs(mc_c_pnl_5[-3])) > float(free_margin):
             _send_alert_(mc_lp[margin_account_number], 'one week')
 
         print(lp_var_info_day)
@@ -308,8 +308,11 @@ def main(argv=None):
         '''
 
 if __name__ == "__main__":
-    schedule.every().hour.do(main)
+    main()
+    #schedule.every().hour.do(main)
 
+'''
 while True:
     schedule.run_pending()
     time.sleep(1)
+'''
