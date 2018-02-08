@@ -3,16 +3,19 @@ import packages
 '''
 import sys
 import json
-from scipy import stats
-import pandas as pd
+import time
+import smtplib
 import schedule
 import psycopg2
-from sqlalchemy import create_engine
-import time
-from pandas import DataFrame
-import numpy as np
 import requests
 import datetime
+import numpy as np
+import pandas as pd
+from scipy import stats
+from pandas import DataFrame
+from email.utils import formataddr
+from sqlalchemy import create_engine
+from email.mime.text import MIMEText
 
 '''
 LP Raw Data
@@ -246,6 +249,24 @@ def _save_lp_var_(lp_var_info):
     df_lp_var_info.to_sql("LP VaR", engine,
                           index=False, if_exists='append')
 
+def _send_alert_(lp, types):
+    my_sender = 'caowei0127@gmail.com'
+    my_pass = 'caoWEI940127'
+    my_user = 'pro@blackwellglobal.com'
+    mail_msg = """
+    <p><a href="https://app.powerbi.com/groups/me/dashboards/ff8942ff-39d7-403e-8b9c-7e9d2151df4b">Open this link to view VaR</a></p>
+    """
+
+    msg = MIMEText(mail_msg, 'html', 'utf-8')
+    msg['From'] = formataddr(["Cao Wei", my_sender])
+    msg['To'] = formataddr(["Pro", my_user])
+    msg['Subject'] = lp + ' VaR: ' + types + ' alerts!!'
+
+    server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+    server.login(my_sender, my_pass)
+    server.sendmail(my_sender, [my_user, ], msg.as_string())
+    server.quit()
+
 def main(argv=None):
     '''
     calculate var
@@ -271,6 +292,11 @@ def main(argv=None):
             'c9': [np.abs(mc_c_pnl[-3]), np.abs(mc_c_pnl_5[-3])],
             'c95': [np.abs(mc_c_pnl[-2]), np.abs(mc_c_pnl_5[-2])],
             'type': ['one day', 'one week']}
+        if np.abs(mc_c_pnl[-4]) * 3 > free_margin:
+            _send_alert_(mc_lp[margin_account_number], 'one day')
+        elif np.abs(mc_c_pnl_5[-3]) > free_margin:
+            _send_alert_(mc_lp[margin_account_number], 'one week')
+
         print(lp_var_info_day)
         _save_lp_var_(lp_var_info_day)
         '''
