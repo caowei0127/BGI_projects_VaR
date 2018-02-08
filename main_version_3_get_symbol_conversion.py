@@ -308,11 +308,9 @@ def main(argv=None):
         '''
 
 if __name__ == "__main__":
-    main()
-    #schedule.every().hour.do(main)
+    schedule.every().hour.do(main)
 
-'''
 while True:
     schedule.run_pending()
     time.sleep(1)
-'''
+
