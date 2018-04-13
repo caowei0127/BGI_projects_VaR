@@ -3,9 +3,11 @@ import packages
 '''
 import sys
 import json
+import time
 import smtplib
 import requests
 import datetime
+import schedule
 import pygsheets
 import numpy as np
 import pandas as pd
@@ -22,6 +24,8 @@ implied_vol_1w = '2126506067'
 symbols_conversion = '720521303'
 gc = pygsheets.authorize()
 spreadsheet = gc.open_by_key(google_sheet_key)
+mc_lp = {10: 'LMAX', 11: 'Divisa', 22: 'Vantage', 34: 'CMC'}
+#mc_lp = {10: 'LMAX'}
 
 
 '''
@@ -242,9 +246,7 @@ def main(argv=None):
                                 'period', 'c50', 'c60', 'c70', 'c80', 'c90', 'c95', 'c99'])
     mean, df_price_return, df_var_cov = _get_price_var_cov_()
     var_cov_implied = _get_implied_var_cov_(
-        df_var_cov, df_price_return, implied_vol_1d)
-    mc_lp = {10: 'LMAX', 11: 'Divisa', 22: 'Vantage'}
-    #mc_lp = {10: 'LMAX'}
+        df_var_cov, df_price_return, implied_vol_1d)    
     for margin_account_number in mc_lp.keys():
         df_weightage, portfolio_value = _get_weightage_(
             df_var_cov, _get_lp_position_(margin_account_number, access_token))
@@ -263,10 +265,10 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    #schedule.every().hour.do(main)
-    main()
+    schedule.every().hour.do(main)
+    #main()
 
 
-'''while True:
+while True:
     schedule.run_pending()
-    time.sleep(1)'''
+    time.sleep(1)
