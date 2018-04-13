@@ -289,8 +289,10 @@ def main(argv=None):
     for margin_account_number in mc_lp.keys():
         free_margin, margin, portfolio_value, weightage_array, dev = _get_lp_var_(
             symbol_list, var_cov, margin_account_number)
+        print(portfolio_value)
         avg_return, std_dev, std_dev_5, avg_return_5, pnl_1, pnl_5 = _get_lp_based_result_(
             portfolio_value, weightage_array, dev, return_statistic)
+        print('dev', dev)
         mc_c_pnl = _get_monte_carlo_result_(
             portfolio_value, avg_return, std_dev)
         mc_c_pnl_5 = _get_monte_carlo_result_(
@@ -321,6 +323,7 @@ def main(argv=None):
 
 if __name__ == "__main__":
     schedule.every().hour.do(main)
+    #main()
 
 while True:
     schedule.run_pending()
