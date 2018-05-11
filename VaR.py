@@ -17,15 +17,15 @@ from email.utils import formataddr
 from sqlalchemy import create_engine
 from email.mime.text import MIMEText
 
-google_sheet_key = '1jJs1QVwIcbdZQk2WIJ7dQQRZDUQB11PumOVGEUQa2k8'
-EOD_price = '343097694'
-implied_vol_1d = '883443104'
-implied_vol_1w = '2126506067'
-symbols_conversion = '720521303'
+google_sheet_key = '1cW7uuO6xDoSNVjYiLPizT6PqGzif91L55itb7rlgrIM'
+EOD_price = '1754757151'
+implied_vol_1d = '73925763'
+implied_vol_1w = '1059815461'
+symbols_conversion = '510693687'
 gc = pygsheets.authorize()
 spreadsheet = gc.open_by_key(google_sheet_key)
 mc_lp = {10: 'LMAX', 11: 'Divisa', 22: 'Vantage', 34: 'CMC'}
-#mc_lp = {10: 'LMAX'}
+#mc_lp = {11: 'Divisa'}
 
 
 '''
@@ -71,7 +71,7 @@ def _get_weightage_(df_var_cov, df_weightage):
     df_weightage['weightage'] = df_weightage['dollarized_value'] / \
         portfolio_value
     df_weightage = df_weightage.drop(
-        ['core_symbol', 'exchange_rate', 'vol symbol', 'position', 'dollarized_value', 'price'], axis=1)
+        ['core_symbol', 'exchange_rate', '1d vol symbol', '1w vol symbol', 'position', 'dollarized_value', 'price'], axis=1)
     df_weightage.set_index(['bbg symbol'], inplace=True)
     df_weightage = df_var_cov.join(df_weightage).iloc[:, -1:]
     print(df_weightage, '\n')
@@ -98,6 +98,7 @@ def _get_lp_position_(margin_account_number, access_token):
     for symbol_position in data_position:
         df_lp_positions.loc[len(df_lp_positions)] = [symbol_position['coreSymbol'].strip('v').strip('|').strip(
             '.'), float(symbol_position['position']), float(symbol_position['adapterPositions'][0]['marketPrice'])]
+    print('lp positions: \n', df_lp_positions)
     df_weightage = pd.merge(_get_symbol_conversion_(),
                             df_lp_positions, on='core_symbol', how='left').fillna(0)
     return df_weightage
@@ -128,16 +129,22 @@ def _get_implied_var_cov_(df_var_cov, df_price_return, implied_vol):
     # get implied var cov
     df_implied_vol = DataFrame(spreadsheet.worksheet(
         property='id', value=implied_vol).get_all_records())
-    df_implied_vol = pd.merge(_get_symbol_conversion_(),
-                              df_implied_vol, on='vol symbol', how='left').fillna(0)
+    print('raw implied vol: \n', df_implied_vol)
+    if implied_vol == implied_vol_1d:
+        df_implied_vol = pd.merge(_get_symbol_conversion_(),
+                                  df_implied_vol, on='1d vol symbol', how='left').fillna(0)
+    elif implied_vol == implied_vol_1w:
+        df_implied_vol = pd.merge(_get_symbol_conversion_(),
+                                  df_implied_vol, on='1w vol symbol', how='left').fillna(0)
     df_implied_vol.drop(['core_symbol', 'exchange_rate',
-                         'vol symbol'], axis=1, inplace=True)
+                         '1d vol symbol', 'base_currency', '1w vol symbol'], axis=1, inplace=True)
     df_implied_vol.set_index(['bbg symbol'], inplace=True)
     print('df_implied_vol: \n', df_implied_vol)
     df_implied_vol = df_implied_vol / (np.sqrt(252) * 100)
-    print(df_var_cov.join(df_implied_vol).iloc[:, -1:])
     var_cov_implied = np.matmul(df_var_cov.join(df_implied_vol).iloc[:, -1:].values, df_var_cov.join(
-        df_implied_vol).iloc[:, -1:].T.values,                                out=None) * df_price_return.corr(method='pearson').as_matrix()
+        df_implied_vol).iloc[:, -1:].T.values, out=None) * df_price_return.corr(method='pearson').as_matrix()
+    '''var_cov_implied = np.matmul(df_var_cov.join(df_implied_vol).iloc[:, -1:].values, df_var_cov.join(df_implied_vol).iloc[:, -1:].T.values, out=None) * (
+        df_var_cov.values / np.matmul(df_price_return.describe().loc[['std']].T.values, df_price_return.describe().loc[['std']].values, out=None))'''
     print('implied var cov: \n', var_cov_implied)
     return var_cov_implied
 
@@ -149,12 +156,13 @@ VaR result
 
 def _get_historical_(avg_return, std_dev, var_list, period, portfolio_value):
     # get normal historical var result
+    print(avg_return, std_dev)
     confidence_lvls = [0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
     var_list.append('normal')
     var_list.append(period)
     for confidence_lvl in confidence_lvls:
-        var_list.append(np.abs(stats.norm.interval(
-            confidence_lvl, avg_return, std_dev)[0] * portfolio_value))
+        var_list.append(np.abs(stats.norm(avg_return, std_dev).ppf(
+            confidence_lvl) * portfolio_value))
     return var_list
 
 
@@ -184,39 +192,51 @@ def _get_monte_carlo_result_(avg_return, std_dev, var_list, period, portfolio_va
     return var_list
 
 
-def _get_avg_dev_(mean, var_cov, df_weightage):
+def _get_avg_dev_1d_(mean, var_cov, df_weightage):
     # get avg and dev
     avg_return = float(np.matmul(mean.values, df_weightage.values)[0])
     dev = float(np.matmul(np.matmul(df_weightage.T.values,
                                     var_cov, out=None), df_weightage.values, out=None))
     std_dev = dev ** 0.5
+    return avg_return, std_dev
+
+
+def _get_avg_dev_1w_(mean, var_cov, df_weightage):
+    # get avg and dev
+    avg_return = float(np.matmul(mean.values, df_weightage.values)[0])
+    dev = float(np.matmul(np.matmul(df_weightage.T.values,
+                                    var_cov, out=None), df_weightage.values, out=None))
     avg_return_5 = (avg_return + 1) ** 5 - 1
     std_dev_5 = (dev * 5) ** 0.5
-    return avg_return, avg_return_5, std_dev, std_dev_5
+    return avg_return_5, std_dev_5
 
 
-def _get_var_result_(avg_return, avg_return_5, std_dev, std_dev_5, df_var, lp, portfolio_value, free_equity, margin, type):
+def _get_var_result_1d_(avg_return, std_dev, df_var, lp, portfolio_value, free_equity, margin, type):
     # consolidate var result
     var_list = [datetime.datetime.now().strftime(
         "%Y-%m-%d %H:00"), lp, free_equity, margin, type]
     df_var.loc[len(df_var)] = _get_historical_(
         avg_return, std_dev, var_list.copy(), 'one day', portfolio_value)
-    df_var.loc[len(df_var)] = _get_historical_(
-        avg_return_5, std_dev_5, var_list.copy(), 'one week', portfolio_value)
     df_var.loc[len(df_var)] = _get_monte_carlo_result_(
         avg_return, std_dev, var_list.copy(), 'one day', portfolio_value)
+
+
+def _get_var_result_1w_(avg_return_5, std_dev_5, df_var, lp, portfolio_value, free_equity, margin, type):
+    # consolidate var result
+    var_list = [datetime.datetime.now().strftime(
+        "%Y-%m-%d %H:00"), lp, free_equity, margin, type]
+    df_var.loc[len(df_var)] = _get_historical_(
+        avg_return_5, std_dev_5, var_list.copy(), 'one week', portfolio_value)
     df_var.loc[len(df_var)] = _get_monte_carlo_result_(
         avg_return_5, std_dev_5, var_list.copy(), 'one week', portfolio_value)
 
 
 def _save_lp_var_(df_var):
     # create_engine说明：dialect[+driver]://user:password@host/dbname[?key=value..]
-    df_lp_var_info = DataFrame(df_var)
     engine = create_engine(
         'postgresql://postgres:12345@localhost:5432/VaR')
-    print(df_lp_var_info)
-    df_lp_var_info.to_sql("VaR", engine,
-                          index=False, if_exists='append')
+    df_var.to_sql("VaR", engine,
+                  index=False, if_exists='append')
 
 
 def _send_alert_(lp, types):
@@ -245,29 +265,38 @@ def main(argv=None):
     df_var = DataFrame(columns=['timestamp', 'lp', 'free_equity', 'margin', 'type', 'method',
                                 'period', 'c50', 'c60', 'c70', 'c80', 'c90', 'c95', 'c99'])
     mean, df_price_return, df_var_cov = _get_price_var_cov_()
-    var_cov_implied = _get_implied_var_cov_(
-        df_var_cov, df_price_return, implied_vol_1d)    
     for margin_account_number in mc_lp.keys():
         df_weightage, portfolio_value = _get_weightage_(
             df_var_cov, _get_lp_position_(margin_account_number, access_token))
         free_equity, margin = _get_lp_equity_(
             margin_account_number, access_token)
-        avg_return, avg_return_5, std_dev, std_dev_5 = _get_avg_dev_(
+        avg_return, std_dev = _get_avg_dev_1d_(
             mean, df_var_cov.T.values, df_weightage)
-        _get_var_result_(avg_return, avg_return_5, std_dev, std_dev_5, df_var,
-                         mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'historical')
-        avg_return_implied, avg_return_5_implied, std_dev_implied, std_dev_5_implied = _get_avg_dev_(
-            mean, var_cov_implied, df_weightage)
-        _get_var_result_(avg_return_implied, avg_return_5_implied, std_dev_implied, std_dev_5_implied, df_var,
-                         mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'implied')
+        avg_return_5, std_dev_5 = _get_avg_dev_1w_(
+            mean, df_var_cov.T.values, df_weightage)
+        _get_var_result_1d_(avg_return, std_dev, df_var,
+                            mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'historical')
+        _get_var_result_1w_(avg_return_5, std_dev_5, df_var,
+                            mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'historical')
+        var_cov_implied_1d = _get_implied_var_cov_(
+            df_var_cov, df_price_return, implied_vol_1d)
+        var_cov_implied_1w = _get_implied_var_cov_(
+            df_var_cov, df_price_return, implied_vol_1w)
+        avg_return_implied, std_dev_implied = _get_avg_dev_1d_(
+            mean, var_cov_implied_1d, df_weightage)
+        avg_return_implied_5, std_dev_implied_5 = _get_avg_dev_1w_(
+            mean, var_cov_implied_1w, df_weightage)
+        _get_var_result_1d_(avg_return_implied, std_dev_implied, df_var,
+                            mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'implied')
+        _get_var_result_1w_(avg_return_implied_5, std_dev_implied_5, df_var,
+                            mc_lp[margin_account_number], portfolio_value, free_equity, margin, 'implied')
     print(df_var.fillna(0))
     _save_lp_var_(df_var.fillna(0))
 
 
 if __name__ == "__main__":
-    schedule.every().hour.do(main)
+    schedule.every(1).hours.do(main)
     #main()
-
 
 while True:
     schedule.run_pending()
